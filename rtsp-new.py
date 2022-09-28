@@ -6,11 +6,11 @@ import cv2
 # output_params = {"-s": "2048x2048", "-r": 30}  # define FFmpeg tweak parameters for writer
 options = {"STREAM_RESOLUTION": "720p", "STREAM_PARAMS": {"nocheckcertificate": True}}
 stream = cv2.VideoCapture(
-    'https://cdn.wolfstream.app/stream/bYAmNbegnx86/manifest.m3u8?token=R6LFDiNwsSArOynyh7Avog&expires=1664360113'
-) # Open live webcam video stream on first index(i.e. 0) device
-output_params = {"-f": "rtsp", "-rtsp_transport":"tcp"}
+    'http://50.248.1.46:8000/mjpg/video.mjpg'
+)  # Open live webcam video stream on first index(i.e. 0) device
+output_params = {"-f": "rtsp", "-rtsp_transport": "tcp"}
 writer = WriteGear(output_filename='rtsp://localhost:8554/stream', compression_mode=True, logging=True,
-                   **output_params)  # Define writer with output filename 'Output.mp4'
+                   **output_params)
 
 # infinite loop
 while True:

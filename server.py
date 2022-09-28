@@ -1,8 +1,17 @@
 import logging
+from threading import Thread
 from concurrent import futures
 import grpc
 import api_pb2
 import api_pb2_grpc
+import camera
+import os
+
+
+def delegate(*args):
+    t = Thread(target=args[0].run())
+    t.start()
+    t.join()
 
 
 class Api(api_pb2_grpc.ScraperServicer):
@@ -11,14 +20,19 @@ class Api(api_pb2_grpc.ScraperServicer):
 
         # send a list of urls containing videos to scrape links
         # for each found url create a response object
-
-        return api_pb2.ScrapeResponse(
-            scraped_urls=[
+        scraped_videos = []
+        for url in request.urls:
+            threaded_camera = camera.ThreadedCameraStream(url)
+            t = Thread(target=delegate, args=[threaded_camera])
+            t.start()
+            scraped_videos.append(
                 api_pb2.ScrapeResponse.ScrapedUrl(
-                    base_url='https://example.com',
-                    rtsp_url='rtsp://example.com',
+                    base_url=url,
+                    rtsp_url=threaded_camera.rtsp_url,
                 )
-            ]
+            )
+        return api_pb2.ScrapeResponse(
+            scraped_urls=scraped_videos
         )
 
 
