@@ -95,7 +95,7 @@ parser.add_argument("--stream_uri", default="/stream", help="rtsp video stream u
 opt = parser.parse_args()
 
 try:
-    # print(cv2.getBuildInformation())
+    print(cv2.getBuildInformation())
     opt.device_id = int(opt.device_id)
     Gst.init(None)
     server = GstServer()

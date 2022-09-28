@@ -8,6 +8,10 @@ import api_pb2_grpc
 class Api(api_pb2_grpc.ScraperServicer):
     def Scrape(self, request, context):
         print(request)
+
+        # send a list of urls containing videos to scrape links
+        # for each found url create a response object
+
         return api_pb2.ScrapeResponse(
             scraped_urls=[
                 api_pb2.ScrapeResponse.ScrapedUrl(
