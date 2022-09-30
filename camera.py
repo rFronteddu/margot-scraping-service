@@ -8,7 +8,6 @@ import cv2
 import numpy as np
 import requests
 from vidgear.gears import WriteGear
-import scraper
 
 
 class ThreadedCameraStream(object):
@@ -30,7 +29,7 @@ class ThreadedCameraStream(object):
             self.rtsp_url = ''
 
         output_params = {"-f": "rtsp", "-rtsp_transport": "tcp"}
-        self.writer = WriteGear(output_filename=self.rtsp_url, compression_mode=True, logging=True,
+        self.writer = WriteGear(output_filename=self.rtsp_url, compression_mode=True, logging=False,
                                 **output_params)
 
         # FPS = 1/X
@@ -83,9 +82,11 @@ class ThreadedCameraStream(object):
                 else:
                     num = ''
                     last_numeric = False
-        found_url = scraper.Scraper(self.src).get_blob_video_url()
-        if found_url is not None:
-            self.src = found_url
+        if self.src.__contains__('jpg') or self.src.__contains__('jpeg'):
+            return False
+        # found_url = scraper.Scraper(self.src).get_blob_video_url()
+        # if found_url is not None:
+        #     self.src = found_url
         return True
 
     def run(self):
