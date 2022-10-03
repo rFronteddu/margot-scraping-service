@@ -1,6 +1,6 @@
 import json
 import time
-from typing import List, Dict, Tuple
+from typing import List, Dict
 
 from selenium import webdriver
 from selenium.common import NoSuchElementException, StaleElementReferenceException
@@ -8,9 +8,12 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 
 from camera import ThreadedCameraStream
+from data import Data
 
 
 class Scraper:
@@ -19,6 +22,7 @@ class Scraper:
         self.cameras = []
         self.init_browser()
         self.src = src
+        self.found_data: List[Data] = []
 
     def init_browser(self):
         chrome_options = Options()
@@ -41,25 +45,29 @@ class Scraper:
         cookies_elem = self.browser.find_elements(By.CLASS_NAME, "css-47sehv")
         if cookies_elem.__len__() > 0:
             cookies_elem[0].click()
-            time.sleep(1)
 
     def get_blob_video_url(self, src=''):
         if src == '':
             src = self.src
         try:
             self.browser.get(src)
-            self.remove_site_cookies_popup()
             class_players = self.browser.find_elements(By.CLASS_NAME, "player")
             if class_players.__len__() > 0:
-                class_players[0].click()
+                element = WebDriverWait(self.browser, 2000).until(
+                    EC.element_to_be_clickable((By.CLASS_NAME, "player")))
+                element.click()
             else:
                 tag_players = self.browser.find_elements(By.TAG_NAME, "player")
                 if tag_players.__len__() > 0:
-                    tag_players[0].click()
+                    element = WebDriverWait(self.browser, 2000).until(
+                        EC.element_to_be_clickable((By.TAG_NAME, "player")))
+                    element.click()
                 else:
                     id_players = self.browser.find_elements(By.ID, "player")
                     if id_players.__len__() > 0:
-                        id_players[0].click()
+                        element = WebDriverWait(self.browser, 2000).until(
+                            EC.element_to_be_clickable((By.ID, "player")))
+                        element.click()
             performance_log = self.browser.get_log('performance')
             network_extra_info = []
             for i in performance_log:
@@ -88,10 +96,10 @@ class Scraper:
         # if page contains a links to a video, search all pages for videos and stream those, possibly make another endpoint for this
         print()
 
-    def find_video_links_on_page(self):
+    def find_video_links_on_page(self) -> List[str]:
         videos_urls = []
         self.browser.get(self.src)
-        time.sleep(1)
+        time.sleep(0.5)
         self.remove_site_cookies_popup()
         a_links = self.browser.find_elements(By.TAG_NAME, 'a')
         for a_element in a_links:
@@ -102,12 +110,11 @@ class Scraper:
                 videos_urls.append(a_element.get_attribute('href'))
         return videos_urls
 
-    def find_video_source_on_page(self, url_list: List[str]) -> Dict[str, List[str]]:
-        videos_urls = {}
+    def find_video_source_on_page(self, url_list: List[str]) -> List[Data]:
+        videos_urls = []
         for url in url_list:
-            videos_urls[url] = []
             self.browser.get(url)
-            time.sleep(1)
+            time.sleep(0.5)
             videos = self.browser.find_elements(By.TAG_NAME, 'video')
             for video in videos:
                 try:
@@ -119,33 +126,47 @@ class Scraper:
                         for child in video_children:
                             child_src = child.get_attribute('src')
                             if child_src is not None and child_src != '':
-                                videos_urls[url].append(child_src)
+                                videos_urls.append(Data(
+                                    video_page_url=url,
+                                    rtsp_url=child_src,
+                                ))
                     if video_src is not None and video_src != '':
                         pure_video_source = video_src \
                             if not video_src.__contains__('blob') \
                             else self.get_blob_video_url(url)
-                        videos_urls[url].append(pure_video_source)
+                        videos_urls.append(Data(
+                            video_page_url=url,
+                            rtsp_url=pure_video_source,
+                        ))
                 except StaleElementReferenceException:
                     pass
         return videos_urls
 
-    def init_cameras(self, urls: List[str]):
-        for url in urls:
-            self.cameras.append(ThreadedCameraStream(url))
+    def init_cameras(self) -> List[ThreadedCameraStream]:
+        for data in self.found_data:
+            camera = ThreadedCameraStream(data.rtsp_url)
+            time.sleep(0.5)
+            if not camera.error:
+                data.rtsp_url = camera.rtsp_url
+                self.cameras.append(camera)
+            else:
+                data.rtsp_url = 'There has been an ERROR while processing the video stream.'
+        return self.cameras
 
     def start_cameras(self):
         for camera in self.cameras:
             camera.run()
 
 
-def find_videos_in_url_list(src_list: List[str]) -> Dict[str, Tuple[Scraper, Dict[str, List[str]]]]:
+def find_videos_in_url_list(src_list: List[str]) -> Dict[str, Scraper]:
     videos_urls = {}
     for src in src_list:
         scraper = Scraper(src)
         videos_urls[scraper.src] = {}
         found_urls = scraper.find_video_links_on_page()
         found_video_sources = scraper.find_video_source_on_page(found_urls)
-        videos_urls[scraper.src] = (scraper, found_video_sources)
+        scraper.found_data = found_video_sources
+        videos_urls[scraper.src] = scraper
         scraper.browser.quit()
     return videos_urls
 
