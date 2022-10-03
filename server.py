@@ -29,7 +29,12 @@ async def scrape(request: List[str]) -> Dict[str, List[Data]]:
 
 
 @app.post("/stream", status_code=200)
-async def scrape(request: List[str]) -> List[Data]:
-    scraped_videos = []
-    # todo and adjust the rest of the code
-    return scraped_videos
+async def stream(request: List[str]) -> List[Data]:
+    return_data: List[Data] = []
+    for url in request:
+        scrap = scraper.Scraper(url, True)
+        data, camera = scrap.init_camera()
+        t = Thread(target=delegate, args=[camera])
+        t.start()
+        return_data.append(data)
+    return return_data

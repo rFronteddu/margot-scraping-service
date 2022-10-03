@@ -1,6 +1,6 @@
 import json
 import time
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 from selenium import webdriver
 from selenium.common import NoSuchElementException, StaleElementReferenceException
@@ -15,14 +15,17 @@ from webdriver_manager.chrome import ChromeDriverManager
 from camera import ThreadedCameraStream
 from data import Data
 
+sleep_time = 0.5
+
 
 class Scraper:
-    def __init__(self, src=''):
-        self.browser = None
-        self.cameras = []
-        self.init_browser()
+    def __init__(self, src: str, direct_video_link: bool = False):
         self.src = src
-        self.found_data: List[Data] = []
+        self.cameras = []
+        self.browser = None
+        if not direct_video_link:
+            self.init_browser()
+            self.found_data: List[Data] = []
 
     def init_browser(self):
         chrome_options = Options()
@@ -42,15 +45,18 @@ class Scraper:
                                         options=chrome_options)
 
     def remove_site_cookies_popup(self):
-        cookies_elem = self.browser.find_elements(By.CLASS_NAME, "css-47sehv")
-        if cookies_elem.__len__() > 0:
-            cookies_elem[0].click()
+        element = WebDriverWait(self.browser, 2000).until(
+            EC.element_to_be_clickable((By.CLASS_NAME, "css-47sehv")))
+        element.click()
 
-    def get_blob_video_url(self, src=''):
-        if src == '':
-            src = self.src
+    def get_blob_video_url(self, cookies_consent: bool = True) -> str:
         try:
-            self.browser.get(src)
+            if self.browser is None:
+                self.init_browser()
+            self.browser.get(self.src)
+            if not cookies_consent:
+                time.sleep(sleep_time)
+                self.remove_site_cookies_popup()
             class_players = self.browser.find_elements(By.CLASS_NAME, "player")
             if class_players.__len__() > 0:
                 element = WebDriverWait(self.browser, 2000).until(
@@ -85,21 +91,16 @@ class Scraper:
                             authority = headers.get(':authority')
                             scheme = headers.get(':scheme')
                             return scheme + '://' + authority + path
-            print()
         except Exception as e:
             print(e)
             pass
         except NoSuchElementException:
             pass
 
-        # if page contains video, take the video and stream it
-        # if page contains a links to a video, search all pages for videos and stream those, possibly make another endpoint for this
-        print()
-
     def find_video_links_on_page(self) -> List[str]:
         videos_urls = []
         self.browser.get(self.src)
-        time.sleep(0.5)
+        time.sleep(sleep_time)
         self.remove_site_cookies_popup()
         a_links = self.browser.find_elements(By.TAG_NAME, 'a')
         for a_element in a_links:
@@ -114,7 +115,7 @@ class Scraper:
         videos_urls = []
         for url in url_list:
             self.browser.get(url)
-            time.sleep(0.5)
+            time.sleep(sleep_time)
             videos = self.browser.find_elements(By.TAG_NAME, 'video')
             for video in videos:
                 try:
@@ -136,26 +137,38 @@ class Scraper:
                             else self.get_blob_video_url(url)
                         videos_urls.append(Data(
                             video_page_url=url,
-                            rtsp_url=pure_video_source,
+                            rtsp_url=pure_video_source
                         ))
                 except StaleElementReferenceException:
                     pass
         return videos_urls
 
+    def init_camera(self, data: Data = None) -> Tuple[Data, ThreadedCameraStream]:
+        rtsp_url = self.src
+        try:
+            pure_url = self.get_blob_video_url(False)
+            if not pure_url.__eq__(self.src) and pure_url != '' and pure_url is not None:
+                rtsp_url = pure_url
+        except Exception:
+            pass
+        if data is None:
+            data = Data(
+                video_page_url=self.src,
+                rtsp_url=rtsp_url
+            )
+        camera = ThreadedCameraStream(data.rtsp_url)
+        time.sleep(sleep_time)
+        if not camera.error:
+            data.rtsp_url = camera.rtsp_url
+            self.cameras.append(camera)
+        else:
+            data.rtsp_url = 'There has been an ERROR while processing the video stream.'
+        return data, camera
+
     def init_cameras(self) -> List[ThreadedCameraStream]:
         for data in self.found_data:
-            camera = ThreadedCameraStream(data.rtsp_url)
-            time.sleep(0.5)
-            if not camera.error:
-                data.rtsp_url = camera.rtsp_url
-                self.cameras.append(camera)
-            else:
-                data.rtsp_url = 'There has been an ERROR while processing the video stream.'
+            self.init_camera(data)
         return self.cameras
-
-    def start_cameras(self):
-        for camera in self.cameras:
-            camera.run()
 
 
 def find_videos_in_url_list(src_list: List[str]) -> Dict[str, Scraper]:
