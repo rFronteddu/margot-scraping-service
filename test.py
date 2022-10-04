@@ -1,11 +1,14 @@
-from vidgear.gears import WriteGear, CamGear
-import cv2
+from selenium.webdriver.common.by import By
+from scraper import Scraper
+import time
 
-a, cap = cv2.VideoCapture('http://72.49.230.145:8080/?action=stream')
-output_params = {"-f": "rtsp", "-rtsp_transport": "tcp"}
-writer = WriteGear(output_filename='rtsp://localhost:8554/test', logging=True,
-                   **output_params)
+src = 'https://lookcam.com/wagrowiec-panorama-of-town/'
+scrap = Scraper(src)
+browser = scrap.init_browser()
 
-while True:
-    frame = cap.read()
-    writer.write(frame)
+browser.get(src)
+scrap.remove_site_cookies_popup()
+res = browser.find_elements(By.XPATH, "//*[contains(.,'Wągrowiec (Poland)')]")
+for r in res:
+    print(r.text)
+

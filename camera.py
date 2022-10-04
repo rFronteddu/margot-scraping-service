@@ -36,8 +36,8 @@ class ThreadedCameraStream(object):
                         self.error = True
                     else:
                         self.writer = WriteGear(output_filename=self.rtsp_url, logging=True, **output_params)
-                except Exception:
-                    pass
+                except Exception as e:
+                    raise e
             else:
                 self.writer = WriteGear(output_filename=self.rtsp_url, logging=True, **output_params)
         except Exception as e:
