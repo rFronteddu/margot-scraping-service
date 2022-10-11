@@ -1,11 +1,18 @@
 version: '3.8'
 
 services:
+  scrape-api:
+    container_name: 'scrape-api'
+    # image: 'scrape-api'
+    build: .
+    command: bash -c "uvicorn server:app --reload"
+    ports:
+      - '8000:8000'
+    volumes:
+      - ../:/api
   rtsp-server:
     container_name: 'rtsp-server'
     image: 'aler9/rtsp-simple-server:latest'
-    volumes:
-      - $PWD/rtsp-simple-server.yml:/rtsp-simple-server.yml
     ports:
       - '8554:8554'
       - '1935:1935'

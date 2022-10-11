@@ -3,12 +3,11 @@ import time
 import uuid
 from threading import Thread
 
-from PIL import Image as pil
 import cv2
 import numpy as np
 import requests
-from vidgear.gears import WriteGear, CamGear
-from urllib import request
+from PIL import Image as pil
+from vidgear.gears import WriteGear
 
 
 class ThreadedCameraStream(object):
@@ -19,6 +18,7 @@ class ThreadedCameraStream(object):
         self.update_var = 0
         self.frame_grabbed = False
         self.error = False
+        self.stopped = False
 
         self.query_param_symbol = '&' if self.src.__contains__('?') else '?'
         self.is_image_stream = self.decide_image_stream()
@@ -28,7 +28,6 @@ class ThreadedCameraStream(object):
 
         try:
             if self.is_image_stream:
-                # self.capture = CamGear(source=self.src, logging=False).start()
                 try:
                     self.capture = cv2.VideoCapture(self.src)
                     grabbed, self.frame = self.capture.read()
@@ -95,13 +94,10 @@ class ThreadedCameraStream(object):
                     last_numeric = False
         if self.src.__contains__('COUNTER'):
             return False
-        # found_url = scraper.Scraper(self.src).get_blob_video_url()
-        # if found_url is not None:
-        #     self.src = found_url
         return True
 
     def run(self):
-        while not self.error:
+        while not self.error and not self.stopped:
             try:
                 self.show_and_write_frame()
             except AttributeError:
@@ -123,6 +119,9 @@ class ThreadedCameraStream(object):
         if not self.error:
             self.writer.close()
         # safely close writer
+
+    def stop(self):
+        self.stopped = True
 
 
 if __name__ == '__main__':
