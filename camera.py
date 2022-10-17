@@ -105,15 +105,6 @@ class ThreadedCameraStream(object):
             except KeyboardInterrupt:
                 pass
 
-            key = cv2.waitKey(1) & 0xFF
-            # check for 'q' key-press
-            if key == ord("q"):
-                # if 'q' key-pressed break out
-                break
-
-        cv2.destroyAllWindows()
-        # close output window
-
         self.capture.release()
         # safely close video stream
         if not self.error:

@@ -113,7 +113,7 @@ class Scraper:
                 videos_urls.append(a_element.get_attribute('href'))
         return videos_urls
 
-    def find_video_source_on_page(self, url_list: List[str]) -> List[Data]:
+    def find_video_source_on_page(self, src: str, url_list: List[str]) -> List[Data]:
         videos_urls = []
         for url in url_list:
             self.browser.get(url)
@@ -130,6 +130,7 @@ class Scraper:
                             child_src = child.get_attribute('src')
                             if child_src is not None and child_src != '':
                                 videos_urls.append(Data(
+                                    scraped_page_url=src,
                                     video_page_url=url,
                                     rtsp_url=child_src,
                                 ))
@@ -138,6 +139,7 @@ class Scraper:
                             if not video_src.__contains__('blob') \
                             else self.get_blob_video_url()
                         videos_urls.append(Data(
+                            scraped_page_url=src,
                             video_page_url=url,
                             rtsp_url=pure_video_source
                         ))
@@ -158,6 +160,7 @@ class Scraper:
                 pass
         if data is None:
             data = Data(
+                scraped_page_url=self.src,
                 video_page_url=self.src,
                 rtsp_url=rtsp_url
             )
@@ -181,7 +184,7 @@ def find_videos_in_url_list(src_list: List[str]) -> Dict[str, Scraper]:
         scraper = Scraper(src)
         videos_urls[scraper.src] = {}
         found_urls = scraper.find_video_links_on_page()
-        found_video_sources = scraper.find_video_source_on_page(found_urls)
+        found_video_sources = scraper.find_video_source_on_page(src, found_urls)
         scraper.found_data = found_video_sources
         videos_urls[scraper.src] = scraper
         scraper.browser.quit()

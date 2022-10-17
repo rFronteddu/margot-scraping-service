@@ -1,16 +1,19 @@
+import collections
 import threading
 import time
-from collections import namedtuple
+import requests
+import scraper
+
 from threading import Thread
 from typing import List, Dict, Tuple
-
-import requests
-from fastapi import FastAPI
-
 from camera import ThreadedCameraStream
 from data import Data
+from fastapi import FastAPI
 
-import scraper
+
+# docker run --rm -it -e RTSP_PROTOCOLS=tcp -p 8554:8554 -p 1935:1935 -p 8888:8888 -p 9997:9997 -v
+# $PWD/rtsp-simple-server.yml:/rtsp-simple-server.yml aler9/rtsp-simple-server
+
 
 app = FastAPI()
 
@@ -30,13 +33,13 @@ def remove_expired_cameras():
             if url.__contains__(path):
                 new_time = get_extended_lifespan()
                 active_cameras[url] = camera, new_time
-                print('increased lifetime of ' + url + ' to ' + str(new_time))
-        print(str(validity) + ' --- ' + str(int(time.time())) + '= ' + str(validity < int(time.time())))
         if validity < int(time.time()):
             cameras_to_remove.append(url)
             camera.stop()
+            print('stopped camera ' + url)
     for url in cameras_to_remove:
-        active_cameras.pop(url)
+        del active_cameras[url]
+    cameras_to_remove.clear()
 
 
 def get_active_streams_paths() -> List[str]:
@@ -64,8 +67,8 @@ def camera_start_delegate(*args):
 
 
 @app.post("/scrape", status_code=200)
-async def scrape(request: List[str]) -> Dict[str, List[Data]]:
-    scraped_videos = {}
+async def scrape(request: List[str]) -> List[Data]:
+    scraped_videos = []
     results = scraper.find_videos_in_url_list(request)
     for scrap_url in results:
         scrap = results[scrap_url]
@@ -73,7 +76,8 @@ async def scrape(request: List[str]) -> Dict[str, List[Data]]:
             t = Thread(target=camera_start_delegate, args=[camera])
             t.start()
             active_cameras[camera.rtsp_url] = camera, get_extended_lifespan()
-        scraped_videos[scrap_url] = scrap.found_data
+        for data in scrap.found_data:
+            scraped_videos.append(data)
     return scraped_videos
 
 
