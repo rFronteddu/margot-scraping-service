@@ -1,3 +1,4 @@
+import base64
 import io
 import time
 import uuid
@@ -6,7 +7,7 @@ from threading import Thread
 import cv2
 import numpy as np
 import requests
-from PIL import Image as pil
+from PIL import Image as Pil
 from vidgear.gears import WriteGear
 
 
@@ -19,39 +20,39 @@ class ThreadedCameraStream(object):
         self.frame_grabbed = False
         self.error = False
         self.stopped = False
+        self.capture = None
 
         self.query_param_symbol = '&' if self.src.__contains__('?') else '?'
         self.is_image_stream = self.decide_image_stream()
-        self.rtsp_url = 'rtsp://localhost:8554/' + str(uuid.uuid4()).replace('-', '')
+        self.rtsp_url = 'rtsp://localhost:8554/' + \
+                        str(base64.urlsafe_b64encode(self.src.encode("utf-8")), "utf-8").replace("=", "")[0:40]
 
         output_params = {"-f": "rtsp", "-rtsp_transport": "tcp"}
 
-        try:
-            if self.is_image_stream:
-                try:
+        if not self.error:
+            try:
+                if self.is_image_stream:
                     self.capture = cv2.VideoCapture(self.src)
                     grabbed, self.frame = self.capture.read()
                     if self.frame is None:
                         self.error = True
                     else:
                         self.writer = WriteGear(output_filename=self.rtsp_url, logging=True, **output_params)
-                except Exception as e:
-                    raise e
-            else:
-                self.writer = WriteGear(output_filename=self.rtsp_url, logging=True, **output_params)
-        except Exception as e:
-            print('Error while processing page (' + self.src + ') ' + e.__str__())
-            raise e
+                else:
+                    self.writer = WriteGear(output_filename=self.rtsp_url, logging=True, **output_params)
+            except Exception as e:
+                print('Error while processing page (' + self.src + '): ' + e.__str__())
+                self.error = True
 
-        # FPS = 1/X
-        # X = desired FPS
-        self.FPS = 1 / 30
-        self.FPS_MS = int(self.FPS * 1000)
+            # FPS = 1/X
+            # X = desired FPS
+            self.FPS = 1 / 30
+            self.FPS_MS = int(self.FPS * 1000)
 
-        # Start frame retrieval thread
-        self.thread = Thread(target=self.update, args=())
-        self.thread.daemon = True
-        self.thread.start()
+            # Start frame retrieval thread
+            self.thread = Thread(target=self.update, args=())
+            self.thread.daemon = True
+            self.thread.start()
 
     def update(self):
         while True:
@@ -59,12 +60,12 @@ class ThreadedCameraStream(object):
                 if self.rtsp_url != '' and not self.error:
                     grabbed, self.frame = self.capture.read()
             else:
-                query_param = 'a=' + str(self.update_var)
+                query_param = 'xyz=' + str(self.update_var)
                 new_image_url = self.src + self.query_param_symbol + query_param
                 self.update_var += 1
                 response = requests.get(new_image_url)
                 img_bytes = io.BytesIO(response.content)
-                img = pil.open(img_bytes)
+                img = Pil.open(img_bytes)
                 self.frame = np.asarray(img)
             time.sleep(self.FPS)
 
@@ -75,9 +76,9 @@ class ThreadedCameraStream(object):
             cv2.waitKey(self.FPS_MS)
 
     def decide_image_stream(self):
-        if self.src.__contains__('.mjpg') or self.src.__contains__('stream') or self.src.__contains__('GetData.cgi?CH='):
+        if self.src.__contains__('.mjpg') or self.src.__contains__('stream'):
             return True
-        if self.src.__contains__('jpg') or self.src.__contains__('jpeg'):
+        if self.src.__contains__('jpg') or self.src.__contains__('jpeg') or self.src.__contains__('COUNTER'):
             return False
         if self.src.__contains__('?'):
             query_param = self.src.split('?').__getitem__(1)
@@ -92,20 +93,20 @@ class ThreadedCameraStream(object):
                 else:
                     num = ''
                     last_numeric = False
-        if self.src.__contains__('COUNTER'):
-            return False
+        if self.src.__contains__('GetData.cgi?CH='):
+            self.error = True
+            return True
         return True
 
     def run(self):
         while not self.error and not self.stopped:
             try:
                 self.show_and_write_frame()
-            except AttributeError:
-                pass
-            except KeyboardInterrupt:
+            except (AttributeError, KeyboardInterrupt):
                 pass
 
-        self.capture.release()
+        if self.capture is not None:
+            self.capture.release()
         # safely close video stream
         if not self.error:
             self.writer.close()
@@ -123,7 +124,8 @@ if __name__ == '__main__':
     # threaded_camera = ThreadedCameraStream('http://188.26.117.165/cgi-bin/faststream.jpg?stream=half&fps=3&rand=COUNTER')
     # threaded_camera = ThreadedCameraStream('https://lookcam.com/wagrowiec-panorama-of-town/')
     # threaded_camera = ThreadedCameraStream('http://70.190.171.110:82/GetData.cgi?CH=1')
+    threaded_camera = ThreadedCameraStream('http://72.49.230.145:8080/?action=stream')
     # threaded_camera = ThreadedCameraStream('http://162.191.138.108:81/cgi-bin/camera?resolution=640&quality=1&Language=0&COUNTER')
     # threaded_camera = ThreadedCameraStream('http://24.245.57.160/nph-jpeg.cgi?0')
-    threaded_camera = ThreadedCameraStream('http://199.104.253.4/mjpg/video.mjpg')
+    # threaded_camera = ThreadedCameraStream('http://199.104.253.4/mjpg/video.mjpg')
     threaded_camera.run()

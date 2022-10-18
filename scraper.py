@@ -44,6 +44,7 @@ class Scraper:
         self.browser = webdriver.Chrome(service=Service(ChromeDriverManager(version='106.0.5249.21').install()),
                                         desired_capabilities=desired_capabilities,
                                         options=chrome_options)
+        self.browser.set_page_load_timeout(10)
         return self.browser
 
     def remove_site_cookies_popup(self):
