@@ -1,18 +1,15 @@
 import json
 import time
-from typing import List, Dict, Tuple
 
 from selenium import webdriver
 from selenium.common import NoSuchElementException, StaleElementReferenceException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.webdriver import WebDriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
-from webdriver_manager.chrome import ChromeDriverManager
-
+from typing import List, Dict, Tuple
 from camera import ThreadedCameraStream
 from data import Data, CameraHolder
 
@@ -41,7 +38,7 @@ class Scraper:
         chrome_options.add_experimental_option('prefs', prefs)
         desired_capabilities = DesiredCapabilities.CHROME
         desired_capabilities['goog:loggingPrefs'] = {'performance': 'ALL'}
-        self.browser = webdriver.Chrome(service=Service(ChromeDriverManager(version='106.0.5249.21').install()),
+        self.browser = webdriver.Remote(command_executor="http://selenium:4444/wd/hub",
                                         desired_capabilities=desired_capabilities,
                                         options=chrome_options)
         self.browser.set_page_load_timeout(10)

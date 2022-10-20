@@ -43,7 +43,8 @@ def remove_expired_cameras():
 
 
 def get_active_streams_paths() -> List[str]:
-    response = requests.get("http://localhost:9997/v1/paths/list")
+    #response = requests.get("http://localhost:9997/v1/paths/list")
+    response = requests.get("http://rtsp-server:9997/v1/paths/list")
     stream_paths = []
     if response.status_code == 200:
         json_response = response.json()

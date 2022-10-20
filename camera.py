@@ -23,7 +23,7 @@ class ThreadedCameraStream(object):
 
         self.query_param_symbol = '&' if self.src.__contains__('?') else '?'
         self.is_image_stream = self.decide_image_stream()
-        self.rtsp_url = 'rtsp://localhost:8554/' + \
+        self.rtsp_url = 'rtsp://rtsp-server:8554/' + \
                         str(base64.urlsafe_b64encode(self.src.encode("utf-8")), "utf-8").replace("=", "")[0:40]
 
         output_params = {"-f": "rtsp", "-rtsp_transport": "tcp"}

@@ -1,0 +1,11 @@
+fastapi
+pydantic
+uvicorn
+pillow
+opencv-python
+selenium
+webdriver-manager
+requests
+urllib3
+numpy
+vidgear

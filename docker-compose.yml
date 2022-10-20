@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  rtsp-server:
+    container_name: 'rtsp-server'
+    image: 'aler9/rtsp-simple-server:latest'
+    volumes:
+      - ./rtsp-simple-server.yml:/rtsp-simple-server.yml
+    ports:
+      - '8554:8554'
+      - '1935:1935'
+      - '8888:8888'
+      - '9997:9997'
+  scrape-service:
+    container_name: 'scrape-service'
+    build: .
+    command: python -m uvicorn server:app --reload --host 0.0.0.0 --port 8081
+    ports:
+    - '8081:8081'
+  selenium:
+    container_name: selenium
+    image: seleniarm/standalone-chromium
+    shm_size: 2g
+    ports:
+      - '4444:4444'
+      - '5900:5900'
+      - '7900:7900'
