@@ -1,15 +1,13 @@
-import collections
 import threading
 import time
-import requests
 import scraper
+import requests
 
 from threading import Thread
-from typing import List, Dict, Tuple
-from camera import ThreadedCameraStream
-from data import Data
+from typing import List, Dict
 from fastapi import FastAPI
-
+from data import Data, CameraHolder
+from datetime import datetime
 
 # docker run --rm -it -e RTSP_PROTOCOLS=tcp -p 8554:8554 -p 1935:1935 -p 8888:8888 -p 9997:9997 -v
 # $PWD/rtsp-simple-server.yml:/rtsp-simple-server.yml aler9/rtsp-simple-server
@@ -17,8 +15,8 @@ from fastapi import FastAPI
 
 app = FastAPI()
 
-active_cameras: Dict[str, Tuple[ThreadedCameraStream, int]] = {}
-cameras_to_remove = []
+
+active_cameras: Dict[str, CameraHolder] = {}
 
 
 def get_extended_lifespan() -> int:
@@ -26,16 +24,18 @@ def get_extended_lifespan() -> int:
 
 
 def remove_expired_cameras():
+    cameras_to_remove = []
     active_paths = get_active_streams_paths()
     for url in active_cameras.keys():
-        camera, validity = active_cameras[url]
+        camera_holder = active_cameras[url]
         for path in active_paths:
             if url.__contains__(path):
                 new_time = get_extended_lifespan()
-                active_cameras[url] = camera, new_time
-        if validity < int(time.time()):
+                camera_holder.lifespan = new_time
+                print('Increased lifespan of '+camera_holder.data.rtsp_url)
+        if camera_holder.lifespan < int(time.time()):
             cameras_to_remove.append(url)
-            camera.stop()
+            camera_holder.camera.stop()
             print('stopped camera ' + url)
     for url in cameras_to_remove:
         del active_cameras[url]
@@ -54,6 +54,21 @@ def get_active_streams_paths() -> List[str]:
     return stream_paths
 
 
+def scrape_url_list(request: List[str]):
+    results = scraper.find_videos_in_url_list(request)
+    for scrap_url in results:
+        scrap = results[scrap_url]
+        for camera in scrap.init_cameras(active_cameras.values()):
+            t = Thread(target=camera_start_delegate, args=[camera])
+            t.start()
+            active_cameras[camera.rtsp_url] = \
+                CameraHolder(
+                    camera,
+                    get_extended_lifespan(),
+                    next((x for x in scrap.found_data if x.scraped_page_url == scrap_url), None)
+                )
+
+
 def purge_inactive_camera_delegate():
     ticker = threading.Event()
     while not ticker.wait(60):
@@ -66,18 +81,24 @@ def camera_start_delegate(*args):
     t.join()
 
 
+def scrape_start_delegate(*args):
+    t = Thread(target=args[0](args[1]))
+    t.start()
+    t.join()
+
+
 @app.post("/scrape", status_code=200)
-async def scrape(request: List[str]) -> List[Data]:
+async def scrape(request: List[str]):
+    t = Thread(target=scrape_start_delegate, args=[scrape_url_list, request])
+    t.start()
+    return datetime.now()
+
+
+@app.get("/videos", status_code=200)
+async def videos() -> List[Data]:
     scraped_videos = []
-    results = scraper.find_videos_in_url_list(request)
-    for scrap_url in results:
-        scrap = results[scrap_url]
-        for camera in scrap.init_cameras():
-            t = Thread(target=camera_start_delegate, args=[camera])
-            t.start()
-            active_cameras[camera.rtsp_url] = camera, get_extended_lifespan()
-        for data in scrap.found_data:
-            scraped_videos.append(data)
+    for path in active_cameras:
+        scraped_videos.append(active_cameras[path].data)
     return scraped_videos
 
 
@@ -89,7 +110,7 @@ async def stream(request: List[str]) -> List[Data]:
         data, camera = scrap.init_camera()
         t = Thread(target=camera_start_delegate, args=[camera])
         t.start()
-        active_cameras[camera.rtsp_url] = camera, get_extended_lifespan()
+        active_cameras[camera.rtsp_url] = CameraHolder(camera, get_extended_lifespan(), data)
         return_data.append(data)
     return return_data
 

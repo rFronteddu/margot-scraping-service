@@ -1,20 +1,14 @@
-# FROM aler9/rtsp-simple-server AS rtsp
-# FROM alpine:3.12
-# RUN apk add --no-cache ffmpeg
-# COPY --from=rtsp /rtsp-simple-server /
-# COPY --from=rtsp /rtsp-simple-server.yml /
-# ENTRYPOINT [ "/rtsp-simple-server" ]
-# Using the Ubuntu image (our OS)
-FROM ubuntu:latest
-# Update package manager (apt-get)
-# and install (with the yes flag `-y`)
-# Python and Pip
-RUN apt-get update && apt-get install -y python3.9 python3-pip
-RUN rm /bin/sh && ln -s /bin/bash /bin/sh
-WORKDIR /api/
-RUN python3 -m pip install fastapi
-RUN python3 -m pip install uvicorn
-RUN python3 -m pip install -U vidgear[core]
-RUN python3 -m pip install Pillow
-RUN python3 -m pip install selenium
-RUN python3 -m pip install webdriver-manager
+#FROM ubuntu:latest
+#WORKDIR /app
+# COPY ./requirements.txt /code/requirements.txt
+# RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
+#COPY ../ /app
+#RUN ls
+#RUN ["/bin/bash", "-c", "source venv/bin/activate"]
+#RUN ["venv/bin/python", "-m", "server:app --host 0.0.0.0 --port 8081"]
+#
+#CMD . /app/venv/bin/activate && exec /app/venv/bin/python -m uvicorn server:app --reload --port 8081
+
+# FROM python:3.9-slim-bullseye
+# WORKDIR /app
+# CMD . bin/sh -c "source /app/venv/bin/activate" && /app/venv/bin/python -m uvicorn server:app --reload --port 8081

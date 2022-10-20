@@ -14,7 +14,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 
 from camera import ThreadedCameraStream
-from data import Data
+from data import Data, CameraHolder
 
 sleep_time = 0.5
 
@@ -173,9 +173,10 @@ class Scraper:
             self.cameras.append(camera)
         return data, camera
 
-    def init_cameras(self) -> List[ThreadedCameraStream]:
+    def init_cameras(self, skip: List[CameraHolder]) -> List[ThreadedCameraStream]:
         for data in self.found_data:
-            self.init_camera(data)
+            if all(i.data.video_page_url != data.video_page_url for i in skip):
+                self.init_camera(data)
         return self.cameras
 
 

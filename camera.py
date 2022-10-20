@@ -1,7 +1,6 @@
 import base64
 import io
 import time
-import uuid
 from threading import Thread
 
 import cv2
@@ -70,10 +69,13 @@ class ThreadedCameraStream(object):
             time.sleep(self.FPS)
 
     def show_and_write_frame(self):
-        if self.frame is not None:
-            # cv2.imshow('frame', self.frame)
-            self.writer.write(self.frame)
-            cv2.waitKey(self.FPS_MS)
+        try:
+            if self.frame is not None:
+                # cv2.imshow('frame', self.frame)
+                self.writer.write(self.frame)
+                cv2.waitKey(self.FPS_MS)
+        except Exception:
+            pass
 
     def decide_image_stream(self):
         if self.src.__contains__('.mjpg') or self.src.__contains__('stream'):
