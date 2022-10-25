@@ -2,14 +2,18 @@ import json
 import time
 
 from selenium import webdriver
-from selenium.common import NoSuchElementException, StaleElementReferenceException
+from selenium.common import StaleElementReferenceException
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from typing import List, Dict, Tuple
+
+from webdriver_manager.chrome import ChromeDriverManager
+
 from camera import ThreadedCameraStream
 from data import Data, CameraHolder
 
@@ -36,9 +40,13 @@ class Scraper:
             "safebrowsing.enabled": True
         }
         chrome_options.add_experimental_option('prefs', prefs)
+        # chrome_options.headless = True //later uncomment for production usage
         desired_capabilities = DesiredCapabilities.CHROME
         desired_capabilities['goog:loggingPrefs'] = {'performance': 'ALL'}
-        self.browser = webdriver.Remote(command_executor="http://selenium:4444/wd/hub",
+        # self.browser = webdriver.Remote(command_executor="http://selenium:4444/wd/hub",
+        #                                desired_capabilities=desired_capabilities,
+        #                                options=chrome_options)
+        self.browser = webdriver.Chrome(service=Service(ChromeDriverManager(version='106.0.5249.21').install()),
                                         desired_capabilities=desired_capabilities,
                                         options=chrome_options)
         self.browser.set_page_load_timeout(10)
@@ -51,52 +59,34 @@ class Scraper:
                 EC.element_to_be_clickable((By.CLASS_NAME, "css-47sehv")))
             element.click()
 
-    def get_blob_video_url(self, cookies_consent: bool = True) -> str:
+    def eval_network_message(self, log):
+        return eval(str(log.get('message')).replace("false", "False").replace("true", "True"))\
+            .get('message').get('params')
+
+    def validate_found_stream_url(self, url):
+        if url is None or url == '':
+            return False
+        return url.__contains__("hlsplaylist.html") or url.__contains__("m3u8")
+
+    def get_blob_video_url(self, go_to_page: bool = False, cookies_consent: bool = True) -> str:
         try:
             if self.browser is None:
                 self.init_browser()
-            self.browser.get(self.src)
+            if go_to_page:
+                self.browser.get(self.src)
             if not cookies_consent:
                 self.remove_site_cookies_popup()
-            class_players = self.browser.find_elements(By.CLASS_NAME, "player")
-            if class_players.__len__() > 0:
-                element = WebDriverWait(self.browser, 2000).until(
-                    EC.element_to_be_clickable((By.CLASS_NAME, "player")))
-                element.click()
-            else:
-                tag_players = self.browser.find_elements(By.TAG_NAME, "player")
-                if tag_players.__len__() > 0:
-                    element = WebDriverWait(self.browser, 2000).until(
-                        EC.element_to_be_clickable((By.TAG_NAME, "player")))
-                    element.click()
-                else:
-                    id_players = self.browser.find_elements(By.ID, "player")
-                    if id_players.__len__() > 0:
-                        element = WebDriverWait(self.browser, 2000).until(
-                            EC.element_to_be_clickable((By.ID, "player")))
-                        element.click()
             performance_log = self.browser.get_log('performance')
-            network_extra_info = []
             for i in performance_log:
-                response = json.loads(i.get('message'))
-                if response.get('message').get('method') == 'Network.requestWillBeSentExtraInfo':
-                    m = i.get('message')
-                    upd = str(m).replace("false", "False").replace("true", "True")
-                    network_extra_info.append(m)
-                    message = eval(upd)
-                    headers = message.get('message').get('params').get('headers')
-                    path = headers.get(':path')
-                    if path:
-                        find_content = str(path).__contains__("hlsplaylist.html") or str(path).__contains__("m3u8")
-                        if find_content:
-                            authority = headers.get(':authority')
-                            scheme = headers.get(':scheme')
-                            return scheme + '://' + authority + path
-        except Exception as e:
-            print(e)
+                response_message_method = json.loads(i.get('message')).get('message').get('method')
+                message_params = self.eval_network_message(i)
+                if response_message_method == 'Network.requestWillBeSent':
+                    url = message_params.get('request').get('url')
+                    if self.validate_found_stream_url(url):
+                        return url
+        except Exception:
             pass
-        except NoSuchElementException:
-            pass
+        return ''
 
     def find_video_links_on_page(self) -> List[str]:
         videos_urls = []
@@ -106,7 +96,7 @@ class Scraper:
         for a_element in a_links:
             if a_element.find_element(By.XPATH, '..').tag_name.__eq__('div') and \
                     any(
-                        child.tag_name == 'img' for child in a_element.find_elements(By.XPATH, './/*')
+                        child.tag_name == 'img' for child in a_element.find_elements(By.XPATH, './/img')
                     ) and a_element.size['width'] > 100 and a_element.size['height'] > 100:
                 videos_urls.append(a_element.get_attribute('href'))
         return videos_urls
@@ -133,6 +123,7 @@ class Scraper:
                                     rtsp_url=child_src,
                                 ))
                     if video_src is not None and video_src != '':
+                        print(url)
                         pure_video_source = video_src \
                             if not video_src.__contains__('blob') \
                             else self.get_blob_video_url()
@@ -163,17 +154,18 @@ class Scraper:
                 rtsp_url=rtsp_url
             )
         time.sleep(sleep_time)
-        if camera is None or camera.error:
+        if camera is None or camera.error or data.rtsp_url == '':
             data.rtsp_url = 'There has been an ERROR while processing the video stream.'
         elif camera is not None and not camera.error:
             data.rtsp_url = camera.rtsp_url
             self.cameras.append(camera)
         return data, camera
 
-    def init_cameras(self, skip: List[CameraHolder]) -> List[ThreadedCameraStream]:
+    def init_cameras(self, skip) -> List[ThreadedCameraStream]:
         for data in self.found_data:
             if all(i.data.video_page_url != data.video_page_url for i in skip):
-                self.init_camera(data)
+                if not data.rtsp_url.__contains__('m3u8'):
+                    self.init_camera(data)
         return self.cameras
 
 

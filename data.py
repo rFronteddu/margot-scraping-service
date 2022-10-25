@@ -14,7 +14,7 @@ class Data(BaseModel):
 
 
 class CameraHolder:
-    def __init__(self, camera: ThreadedCameraStream, lifespan: int, data: Data):
+    def __init__(self, camera: ThreadedCameraStream or None, lifespan: int, data: Data):
         self.camera = camera
         self.lifespan = lifespan
         self.data = data

@@ -1,5 +1,5 @@
 # Web scraping service
-This service exposes an API for scraping videos contained in a passed list of URLs. Its main goal is form the response containing relevant information about found videos (such as Geolocation) from scraped information. The application utilizes libraries such as [VidGear](https://abhitronix.github.io/vidgear) which is a library based on OpenCV, and [FastAPI](https://fastapi.tiangolo.com) for API hosting.
+This service exposes an API for scraping videos contained in a passed list of URLs. Its main goal is to form the response containing relevant information about found videos (such as Geolocation) from scraped information. The application utilizes libraries such as [VidGear](https://abhitronix.github.io/vidgear) which is a library based on OpenCV, and [FastAPI](https://fastapi.tiangolo.com) for API hosting.
 
 All found videos are streamed via RTSP protocol, which can be opened for instance in VLC player. Streams are valid for 5 minutes. Watching any of the streams will increase its lifespan, so when user quits watching the stream it will still be active for another five minutes.
 

@@ -9,9 +9,6 @@ from fastapi import FastAPI
 from data import Data, CameraHolder
 from datetime import datetime
 
-# docker run --rm -it -e RTSP_PROTOCOLS=tcp -p 8554:8554 -p 1935:1935 -p 8888:8888 -p 9997:9997 -v
-# $PWD/rtsp-simple-server.yml:/rtsp-simple-server.yml aler9/rtsp-simple-server
-
 
 app = FastAPI()
 
@@ -35,7 +32,8 @@ def remove_expired_cameras():
                 print('Increased lifespan of '+camera_holder.data.rtsp_url)
         if camera_holder.lifespan < int(time.time()):
             cameras_to_remove.append(url)
-            camera_holder.camera.stop()
+            if camera_holder.camera is not None:
+                camera_holder.camera.stop()
             print('stopped camera ' + url)
     for url in cameras_to_remove:
         del active_cameras[url]
@@ -59,15 +57,27 @@ def scrape_url_list(request: List[str]):
     results = scraper.find_videos_in_url_list(request)
     for scrap_url in results:
         scrap = results[scrap_url]
-        for camera in scrap.init_cameras(active_cameras.values()):
-            t = Thread(target=camera_start_delegate, args=[camera])
-            t.start()
-            active_cameras[camera.rtsp_url] = \
+        cameras = scrap.init_cameras(active_cameras.values())
+        for data in scrap.found_data:
+            camera = next((x for x in cameras if x.rtsp_url == data.rtsp_url), None)
+            if camera is not None:
+                t = Thread(target=camera_start_delegate, args=[camera])
+                t.start()
+            active_cameras[data.rtsp_url] = \
                 CameraHolder(
                     camera,
                     get_extended_lifespan(),
-                    next((x for x in scrap.found_data if x.scraped_page_url == scrap_url), None)
+                    data
                 )
+        #for camera in scrap.init_cameras(active_cameras.values()):
+        #    t = Thread(target=camera_start_delegate, args=[camera])
+        #    t.start()
+        #    active_cameras[camera.rtsp_url] = \
+        #        CameraHolder(
+        #            camera,
+        #            get_extended_lifespan(),
+        #            next((x for x in scrap.found_data if x.rtsp_url == camera.rtsp_url), None)
+        #        )
 
 
 def purge_inactive_camera_delegate():

@@ -11,7 +11,7 @@ from vidgear.gears import WriteGear
 
 
 class ThreadedCameraStream(object):
-    def __init__(self, src=''):
+    def __init__(self, src: str):
         self.frame = None
         self.video = None
         self.src = src
@@ -23,22 +23,22 @@ class ThreadedCameraStream(object):
 
         self.query_param_symbol = '&' if self.src.__contains__('?') else '?'
         self.is_image_stream = self.decide_image_stream()
-        self.rtsp_url = 'rtsp://rtsp-server:8554/' + \
-                        str(base64.urlsafe_b64encode(self.src.encode("utf-8")), "utf-8").replace("=", "")[0:40]
-
-        output_params = {"-f": "rtsp", "-rtsp_transport": "tcp"}
 
         if not self.error:
             try:
+                self.rtsp_url = 'rtsp://rtsp-server:8554/' + \
+                                str(base64.urlsafe_b64encode(self.src.encode("utf-8")), "utf-8").replace("=", "")[0:100]
+                print('RTSP URL for video '+self.src+' : '+self.rtsp_url)
+                output_params = {"-f": "rtsp", "-rtsp_transport": "tcp"}
                 if self.is_image_stream:
                     self.capture = cv2.VideoCapture(self.src)
                     grabbed, self.frame = self.capture.read()
                     if self.frame is None:
                         self.error = True
                     else:
-                        self.writer = WriteGear(output_filename=self.rtsp_url, logging=True, **output_params)
+                        self.writer = WriteGear(output_filename=self.rtsp_url, logging=False, **output_params)
                 else:
-                    self.writer = WriteGear(output_filename=self.rtsp_url, logging=True, **output_params)
+                    self.writer = WriteGear(output_filename=self.rtsp_url, logging=False, **output_params)
             except Exception as e:
                 print('Error while processing page (' + self.src + '): ' + e.__str__())
                 self.error = True
@@ -95,7 +95,7 @@ class ThreadedCameraStream(object):
                 else:
                     num = ''
                     last_numeric = False
-        if self.src.__contains__('GetData.cgi?CH='):
+        if self.src.__contains__('GetData.cgi?CH=') or self.src == '':
             self.error = True
             return True
         return True
