@@ -1,6 +1,8 @@
 import json
 import time
+import re
 
+import requests
 from selenium import webdriver
 from selenium.common import StaleElementReferenceException
 from selenium.webdriver.chrome.options import Options
@@ -11,13 +13,19 @@ from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from typing import List, Dict, Tuple
-
 from webdriver_manager.chrome import ChromeDriverManager
-
 from camera import ThreadedCameraStream
-from data import Data, CameraHolder
+from model import Data, CameraHolder, GeolocationModel
 
 sleep_time = 0.5
+
+page_title_cleanse_things = ["camera", "live", "webcam", "cam", ":", "-", ".", ","]
+geolocation_aliases = {'latitude': ['latitude', 'lt'],
+                       'longitude': ['longitude', 'ln']
+                       }
+
+geocoding_api_url = 'http://dev.virtualearth.net/REST/v1/Locations/{query}?maxRes=1&key={key}'
+geocoding_api_key = 'AqVzpN0yLUp3VvWccG02Hklgt6L5LYVWnAcFTIWWg-7IkLqLm3Man_Rl2skFRzDp'
 
 
 class Scraper:
@@ -49,7 +57,7 @@ class Scraper:
         self.browser = webdriver.Chrome(service=Service(ChromeDriverManager(version='106.0.5249.21').install()),
                                         desired_capabilities=desired_capabilities,
                                         options=chrome_options)
-        self.browser.set_page_load_timeout(10)
+        self.browser.set_page_load_timeout(30)
         return self.browser
 
     def remove_site_cookies_popup(self):
@@ -60,7 +68,7 @@ class Scraper:
             element.click()
 
     def eval_network_message(self, log):
-        return eval(str(log.get('message')).replace("false", "False").replace("true", "True"))\
+        return eval(str(log.get('message')).replace("false", "False").replace("true", "True")) \
             .get('message').get('params')
 
     def validate_found_stream_url(self, url):
@@ -101,6 +109,81 @@ class Scraper:
                 videos_urls.append(a_element.get_attribute('href'))
         return videos_urls
 
+    def contains_number(self, string: str):
+        return any(char.isdigit() for char in string)
+
+    def keep_only_numerics_from_string(self, string) -> float:
+        return float(re.sub(r'[^0-9|.|,]', '', string))
+
+    def find_element_containing_text(self, search_text) -> WebDriver or None:
+        for text in geolocation_aliases[search_text]:
+            coords = self.browser.find_elements(By.XPATH, "//*[contains(translate(text(), "
+                                                          "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
+                                                          "'abcdefghijklmnopqrstuvwxyz'), '"
+                                                + text + "')]")
+            if len(coords) > 0:
+                return coords[0]
+        return None
+
+    def extract_present_geolocation_from_page(self, search_text) -> float:
+        coords = self.find_element_containing_text(search_text)
+        if coords is None or coords.text == '':
+            return .0
+
+        if self.contains_number(coords.text):
+            numeric_result = self.keep_only_numerics_from_string(coords.text)
+            print(coords.text + ': ' + numeric_result)
+            return numeric_result
+        else:
+            sibling = coords.find_elements(By.XPATH, "following-sibling::*[1]")
+            print(coords.text + ' ' + sibling[0].text)
+            try:
+                return float(sibling[0].text)
+            except ValueError:
+                return .0
+
+    def find_geolocation_from_page_title(self, page_title: str) -> GeolocationModel:
+        search_phrase = page_title.lower()
+        ulr_to_remove = self.src\
+            .replace('https', '')\
+            .replace('http', '')\
+            .replace('://', '')\
+            .replace('www.', '')
+        search_phrase = search_phrase\
+            .replace(ulr_to_remove, '')\
+            .replace(ulr_to_remove.split('.')[0], '')
+        for rem in page_title_cleanse_things:
+            search_phrase = search_phrase.replace(rem, '')
+        search_phrase = re.sub(' +', ' ', search_phrase)
+        remaining_search_words = search_phrase.split(' ')
+        removed: list[str] = []
+        for word in reversed(remaining_search_words):
+            if self.src.__contains__(word) and all(not a.__contains__(word) for a in removed):
+                removed.append(word)
+                search_phrase = search_phrase.replace(word, '')
+        search_phrase = re.sub(' +', ' ', search_phrase).rstrip()
+        print(search_phrase)
+        response = requests.get(geocoding_api_url.format(query=search_phrase, key=geocoding_api_key))
+        geolocation = GeolocationModel()
+        if response.status_code == 200:
+            coords = response.json()['resourceSets'][0]['resources'][0]['geocodePoints'][0]['coordinates']
+            geolocation.latitude = coords[0]
+            geolocation.longitude = coords[1]
+        else:
+            print(response.status_code)
+        return geolocation
+
+    def find_geolocation(self, page_title: str) -> GeolocationModel:
+        latitude = self.extract_present_geolocation_from_page("latitude")
+        longitude = self.extract_present_geolocation_from_page("longitude")
+        geo = GeolocationModel()
+        if latitude != .0 or longitude != .0:
+            geo.latitude = latitude
+            geo.longitude = longitude
+        else:
+            geo = self.find_geolocation_from_page_title(page_title)
+        return geo
+
     def find_video_source_on_page(self, src: str, url_list: List[str]) -> List[Data]:
         videos_urls = []
         for url in url_list:
@@ -111,6 +194,7 @@ class Scraper:
                 try:
                     if video.size['width'] < 10 and video.size['height'] < 10:
                         continue
+                    location = self.find_geolocation(self.browser.title)
                     video_src = video.get_attribute('src')
                     if video_src is None or video_src == '':
                         video_children = video.find_elements(By.XPATH, './/*')
@@ -121,6 +205,8 @@ class Scraper:
                                     scraped_page_url=src,
                                     video_page_url=url,
                                     rtsp_url=child_src,
+                                    latitude=location.latitude,
+                                    longitude=location.longitude
                                 ))
                     if video_src is not None and video_src != '':
                         print(url)
@@ -130,7 +216,9 @@ class Scraper:
                         videos_urls.append(Data(
                             scraped_page_url=src,
                             video_page_url=url,
-                            rtsp_url=pure_video_source
+                            rtsp_url=pure_video_source,
+                            latitude=location.latitude,
+                            longitude=location.longitude
                         ))
                 except StaleElementReferenceException:
                     pass

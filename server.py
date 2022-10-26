@@ -6,7 +6,7 @@ import requests
 from threading import Thread
 from typing import List, Dict
 from fastapi import FastAPI
-from data import Data, CameraHolder
+from model import Data, CameraHolder
 from datetime import datetime
 
 
