@@ -1,10 +1,10 @@
 import json
 import time
 import re
-
 import requests
+import csv
+
 from selenium import webdriver
-from selenium.common import StaleElementReferenceException, NoSuchFrameException
 from selenium.webdriver import ActionChains
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -17,7 +17,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from typing import List, Dict, Tuple
 from webdriver_manager.chrome import ChromeDriverManager
 from camera import ThreadedCameraStream
-from model import Data, CameraHolder, GeolocationModel
+from model import Data, GeolocationModel
 
 sleep_time = 0.5
 
@@ -35,12 +35,23 @@ geocoding_api_url = 'http://dev.virtualearth.net/REST/v1/Locations/{query}?maxRe
 geocoding_api_key = 'AqVzpN0yLUp3VvWccG02Hklgt6L5LYVWnAcFTIWWg-7IkLqLm3Man_Rl2skFRzDp'
 
 
+def load_country_list() -> list[str]:
+    lst = []
+    with open('countries.csv', newline='') as csvfile:
+        for row in csv.reader(csvfile):
+            for record in row:
+                lst.append(record)
+    return lst
+
+
+countries = load_country_list()
+
+
 class Scraper:
     def __init__(self, src: str, direct_video_link: bool = False):
         self.src = src
         self.cameras = []
         self.browser = None
-        self.entity_types: list[str] = []
         if not direct_video_link:
             self.init_browser()
             self.found_data: List[Data] = []
@@ -104,7 +115,7 @@ class Scraper:
                         else:
                             validated_urls.append(url)
             if validated_urls.__len__() > 0:
-                return validated_urls[0]
+                return validated_urls.pop()
         except Exception:
             pass
         return ''
@@ -178,7 +189,7 @@ class Scraper:
             except ValueError:
                 return ''
 
-    def find_geolocation_from_page_title(self, page_title: str, purge_from_src: bool = True) -> GeolocationModel:
+    def find_geolocation_from_page_title(self, page_title: str, country: str, purge_from_src: bool = True) -> GeolocationModel:
         search_phrase = page_title.lower()
         ulr_to_remove = self.src \
             .replace('https', '') \
@@ -198,13 +209,13 @@ class Scraper:
                 if self.src.__contains__(word) and all(not a.__contains__(word) for a in removed):
                     removed.append(word)
                     search_phrase = search_phrase.replace(word, '')
-        search_phrase = re.sub(' +', ' ', search_phrase).rstrip().lstrip()
-        print('Seach phrase: ' + search_phrase)
+        search_phrase = re.sub(' +', ' ', search_phrase).__add__(' ').__add__(country).strip()
+        print('Search phrase: ' + search_phrase)
         response = requests.get(geocoding_api_url.format(query=search_phrase, key=geocoding_api_key))
-        final_geolocation = GeolocationModel()
+        final_geolocation: GeolocationModel = GeolocationModel()
         if response.status_code == 200:
             response_resources = response.json()['resourceSets'][0]['resources']
-            found_locations: list[GeolocationModel] = []
+            found_locations = {}
             for i in range(len(response_resources)):
                 geolocation = GeolocationModel()
                 response_resource = response_resources[i]
@@ -212,27 +223,37 @@ class Scraper:
                 geolocation.latitude = coords[0]
                 geolocation.longitude = coords[1]
                 geolocation.entity_type = response_resource['entityType']
-                if page_title.replace(' ', '').lower().__contains__(str(geolocation.entity_type).lower()) and not self.entity_types.__contains__(geolocation.entity_type):
-                    self.entity_types.append(geolocation.entity_type)
                 response_address = response_resource['address']
                 try:
                     geolocation.country = response_address['countryRegion']
                     geolocation.city = response_address['adminDistrict2']
                     geolocation.place = response_address['locality']
-                except KeyError:
+                    found_locations.setdefault(geolocation.entity_type.lower(), []).append(geolocation)
+                except KeyError as e:
                     pass
-                found_locations.append(geolocation)
-            for location in found_locations:
-                for entity_type in self.entity_types:
-                    if location.entity_type == entity_type:
+                for entity_type in found_locations:
+                    for location in found_locations[entity_type]:
+                        print(location.place + ", " + location.city + ", " + location.country + " (" + location.entity_type + ")")
+            max_occurrence = 0
+            max_entity_type = ""
+            for entity_type in found_locations.keys():
+                occ = found_locations[entity_type].__len__()
+                if occ > max_occurrence:
+                    max_occurrence = occ
+                    max_entity_type = entity_type
+            if country != "":
+                for location in found_locations[max_entity_type]:
+                    if location.country.__contains__(country):
                         final_geolocation = location
-            if len(found_locations) >= 1 and final_geolocation.latitude == .0 or final_geolocation.country == '':
-                final_geolocation = found_locations[0]
+                        break
+            if final_geolocation.country == "" or final_geolocation.country is None:
+                final_geolocation = found_locations[max_entity_type][0]
+            print()
         else:
             print(response.status_code)
         return final_geolocation
 
-    def find_geolocation(self, page_title: str, purge_from_src: bool = True) -> GeolocationModel:
+    def find_geolocation(self, page_title: str, element: WebElement, purge_from_src: bool = True) -> GeolocationModel:
         latitude = self.extract_present_geolocation_from_page("latitude")
         longitude = self.extract_present_geolocation_from_page("longitude")
         geo = GeolocationModel()
@@ -255,7 +276,8 @@ class Scraper:
                 else:
                     geo.country += ', ' + country
         else:
-            geo = self.find_geolocation_from_page_title(page_title, purge_from_src)
+            country = self.find_video_page_country(element, None, 3)
+            geo = self.find_geolocation_from_page_title(page_title, country, purge_from_src)
         return geo
 
     def create_data(self, scrap_page_url: str, video_url: str, stream_url: str, location: GeolocationModel) -> Data:
@@ -282,7 +304,22 @@ class Scraper:
                 pass
         return video_src
 
-    def find_and_click_button_and_divs_to_play_video_element(self, video_element, current_element, depth: int):
+    def find_video_page_country(self, video_element: WebElement, current_element: WebElement | None, depth: int) -> str:
+        parent_to_search = video_element.find_element(By.XPATH, '..') if current_element is None else current_element.find_element(By.XPATH, '..')
+        while depth > 1:
+            parent_to_search = parent_to_search.find_element(By.XPATH, '..')
+            depth = depth - 1
+        max_occurrence = 0
+        found_country = ""
+        for country in countries:
+            country_elements = parent_to_search.find_elements(By.XPATH, "//*[contains(., '"+country+"')]")
+            occ = country_elements.__len__()
+            if occ > max_occurrence:
+                max_occurrence = occ
+                found_country = country
+        return found_country
+
+    def find_and_click_button_and_divs_to_play_video_element(self, video_element: WebElement, current_element: WebElement | None, depth: int):
         parent_to_search = video_element.find_element(By.XPATH, '..') if current_element is None else current_element.find_element(By.XPATH, '..')
         while depth > 1:
             parent_to_search = parent_to_search.find_element(By.XPATH, '..')
@@ -304,20 +341,22 @@ class Scraper:
                         video_src = self.find_and_click_button_and_divs_to_play_video_element(element, None, 3)
                         time.sleep(sleep_time)
                     got_src_from_child = False
+                    final_src = ''
                     if video_src is None or video_src == '' or video_src.startswith("blob:"):
                         video_children = element.find_elements(By.XPATH, './/*')
                         for child in video_children:
                             child_src = child.get_attribute('src')
                             if child_src is not None and child_src != '':
-                                location = self.find_geolocation(self.browser.title, self.src != url)
-                                videos_urls.append(self.create_data(src, url, child_src, location))
+                                final_src = child_src
                                 got_src_from_child = True
                     if video_src is not None and video_src != '' and not got_src_from_child:
-                        pure_video_source = video_src if not video_src.__contains__('blob') else self.get_blob_video_url()
-                        location = self.find_geolocation(self.browser.title, self.src != url)
-                        videos_urls.append(self.create_data(src, url, pure_video_source, location))
+                        final_src = video_src if not video_src.__contains__('blob') else self.get_blob_video_url()
+                    if final_src != '' and final_src is not None:
+                        location = self.find_geolocation(self.browser.title, element, self.src != url)
+                        videos_urls.append(self.create_data(src, url, final_src, location))
+                        print(url + "   " + final_src)
         except Exception as e:
-            pass
+            print(e)
         return videos_urls
 
     def find_video_source_on_page(self, src: str, url_list: List[str]) -> List[Data]:
