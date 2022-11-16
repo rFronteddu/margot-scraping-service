@@ -8,6 +8,9 @@ class Data(BaseModel):
     rtsp_url: str
     latitude: float = .0
     longitude: float = .0
+    country: str = ''
+    city: str = ''
+    place: str = ''
 
 
 class GeolocationModel:
@@ -17,6 +20,10 @@ class GeolocationModel:
         self.place: str = ''
         self.latitude: float = .0
         self.longitude: float = .0
+        self.entity_type: str = ''
+
+    def __str__(self):
+        return self.place + ' ' + self.city + '  ' + self.country + ' (' + str(self.latitude) + ',' + str(self.longitude) + ')'
 
 
 class CameraHolder:

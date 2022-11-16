@@ -9,9 +9,7 @@ from fastapi import FastAPI
 from model import Data, CameraHolder
 from datetime import datetime
 
-
 app = FastAPI()
-
 
 active_cameras: Dict[str, CameraHolder] = {}
 
@@ -29,7 +27,7 @@ def remove_expired_cameras():
             if url.__contains__(path):
                 new_time = get_extended_lifespan()
                 camera_holder.lifespan = new_time
-                print('Increased lifespan of '+camera_holder.data.rtsp_url)
+                print('Increased lifespan of ' + camera_holder.data.rtsp_url)
         if camera_holder.lifespan < int(time.time()):
             cameras_to_remove.append(url)
             if camera_holder.camera is not None:
@@ -41,7 +39,7 @@ def remove_expired_cameras():
 
 
 def get_active_streams_paths() -> List[str]:
-    #response = requests.get("http://localhost:9997/v1/paths/list")
+    # response = requests.get("http://localhost:9997/v1/paths/list")
     response = requests.get("http://rtsp-server:9997/v1/paths/list")
     stream_paths = []
     if response.status_code == 200:
@@ -69,15 +67,6 @@ def scrape_url_list(request: List[str]):
                     get_extended_lifespan(),
                     data
                 )
-        #for camera in scrap.init_cameras(active_cameras.values()):
-        #    t = Thread(target=camera_start_delegate, args=[camera])
-        #    t.start()
-        #    active_cameras[camera.rtsp_url] = \
-        #        CameraHolder(
-        #            camera,
-        #            get_extended_lifespan(),
-        #            next((x for x in scrap.found_data if x.rtsp_url == camera.rtsp_url), None)
-        #        )
 
 
 def purge_inactive_camera_delegate():
@@ -111,19 +100,6 @@ async def videos() -> List[Data]:
     for path in active_cameras:
         scraped_videos.append(active_cameras[path].data)
     return scraped_videos
-
-
-@app.post("/stream", status_code=200)
-async def stream(request: List[str]) -> List[Data]:
-    return_data: List[Data] = []
-    for url in request:
-        scrap = scraper.Scraper(url, True)
-        data, camera = scrap.init_camera()
-        t = Thread(target=camera_start_delegate, args=[camera])
-        t.start()
-        active_cameras[camera.rtsp_url] = CameraHolder(camera, get_extended_lifespan(), data)
-        return_data.append(data)
-    return return_data
 
 
 thread = Thread(target=purge_inactive_camera_delegate)

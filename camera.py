@@ -28,7 +28,7 @@ class ThreadedCameraStream(object):
             try:
                 self.rtsp_url = 'rtsp://rtsp-server:8554/' + \
                                 str(base64.urlsafe_b64encode(self.src.encode("utf-8")), "utf-8").replace("=", "")[0:100]
-                print('RTSP URL for video '+self.src+' : '+self.rtsp_url)
+                print('RTSP URL for video ' + self.src + ' : ' + self.rtsp_url)
                 output_params = {"-f": "rtsp", "-rtsp_transport": "tcp"}
                 if self.is_image_stream:
                     self.capture = cv2.VideoCapture(self.src)
@@ -43,12 +43,9 @@ class ThreadedCameraStream(object):
                 print('Error while processing page (' + self.src + '): ' + e.__str__())
                 self.error = True
 
-            # FPS = 1/X
-            # X = desired FPS
             self.FPS = 1 / 30
             self.FPS_MS = int(self.FPS * 1000)
 
-            # Start frame retrieval thread
             self.thread = Thread(target=self.update, args=())
             self.thread.daemon = True
             self.thread.start()
@@ -109,25 +106,8 @@ class ThreadedCameraStream(object):
 
         if self.capture is not None:
             self.capture.release()
-        # safely close video stream
         if not self.error:
             self.writer.close()
-        # safely close writer
 
     def stop(self):
         self.stopped = True
-
-
-if __name__ == '__main__':
-    # url = input('Enter URL with a camera image stream: ')
-    # threaded_camera = ThreadedCameraStream('http://50.248.1.46:8000/mjpg/video.mjpg')
-    # threaded_camera = ThreadedCameraStream('http://73.226.128.200/mjpg/video.mjpg')
-    # threaded_camera = ThreadedCameraStream('http://174.141.213.150:9000/snap.jpg?JpegSize=M&JpegCam=1&r=COUNTER')
-    # threaded_camera = ThreadedCameraStream('http://188.26.117.165/cgi-bin/faststream.jpg?stream=half&fps=3&rand=COUNTER')
-    # threaded_camera = ThreadedCameraStream('https://lookcam.com/wagrowiec-panorama-of-town/')
-    # threaded_camera = ThreadedCameraStream('http://70.190.171.110:82/GetData.cgi?CH=1')
-    threaded_camera = ThreadedCameraStream('http://72.49.230.145:8080/?action=stream')
-    # threaded_camera = ThreadedCameraStream('http://162.191.138.108:81/cgi-bin/camera?resolution=640&quality=1&Language=0&COUNTER')
-    # threaded_camera = ThreadedCameraStream('http://24.245.57.160/nph-jpeg.cgi?0')
-    # threaded_camera = ThreadedCameraStream('http://199.104.253.4/mjpg/video.mjpg')
-    threaded_camera.run()
