@@ -1,7 +1,10 @@
 # Web scraping service
 This service exposes an API for scraping videos contained in a passed list of URLs. Its main goal is to form the response containing relevant information about found videos (such as Geolocation) from scraped information. The application utilizes libraries such as [VidGear](https://abhitronix.github.io/vidgear) which is a library based on OpenCV, and [FastAPI](https://fastapi.tiangolo.com) for API hosting.
 
-All found videos are streamed via RTSP protocol, which can be opened for instance in VLC player. Streams are valid for 5 minutes. Watching any of the streams will increase its lifespan, so when user quits watching the stream it will still be active for another five minutes.
+If found video's image stream origin is directly from a webcam or if is in either low quality or low framerate, it will be streamed from this service via RTSP protocol. Both stream variants can be opened for instance in VLC player. Those streams are valid for 5 minutes. Watching any of the streams will increase its lifespan, so when user quits watching the stream it will still be active for another five minutes.
+High quality streams in HLS protocol, video's URL will be returned as the stream URL.
+
+**NOTE: Streaming multiple RTSP videos could require more resources assigned to this service's docker container.**
 
 ## How to run it
 This project is meant to run in Docker. It consists of three separate parts that communicate with each other. 

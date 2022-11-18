@@ -1,21 +1,22 @@
-import json
-import time
-import re
-import requests
 import csv
+import json
+import re
+import time
+from typing import List, Dict, Tuple
 
+import requests
 from selenium import webdriver
 from selenium.webdriver import ActionChains
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+from selenium.webdriver.edge.service import Service
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
-from typing import List, Dict, Tuple
 from webdriver_manager.chrome import ChromeDriverManager
+
 from camera import ThreadedCameraStream
 from model import Data, GeolocationModel
 
@@ -67,15 +68,15 @@ class Scraper:
             "safebrowsing.enabled": True
         }
         chrome_options.add_experimental_option('prefs', prefs)
-        # chrome_options.headless = True //later uncomment for production usage
+        chrome_options.headless = True  # //use this for debugging purposes
         desired_capabilities = DesiredCapabilities.CHROME
         desired_capabilities['goog:loggingPrefs'] = {'performance': 'ALL'}
-        # self.browser = webdriver.Remote(command_executor="http://selenium:4444/wd/hub",
-        #                                desired_capabilities=desired_capabilities,
-        #                                options=chrome_options)
-        self.browser = webdriver.Chrome(service=Service(ChromeDriverManager(version='106.0.5249.21').install()),
+        self.browser = webdriver.Remote(command_executor="http://selenium:4444/wd/hub",
                                         desired_capabilities=desired_capabilities,
                                         options=chrome_options)
+        #self.browser = webdriver.Chrome(service=Service(ChromeDriverManager(version='106.0.5249.21').install()),  # for debugging purposes
+        #                                desired_capabilities=desired_capabilities,
+        #                                options=chrome_options)
         self.browser.set_page_load_timeout(30)
         return self.browser
 
@@ -129,11 +130,10 @@ class Scraper:
             for a_element in a_links:
                 if a_element.find_element(By.XPATH, '..').tag_name.__eq__('div') and a_element.size['width'] > 100 and a_element.size['height'] > 100 and \
                         (
-                            any(child.tag_name == 'img' for child in a_element.find_elements(By.XPATH, './/img')) or
-                            a_element.value_of_css_property("background-image") != ""
+                                any(child.tag_name == 'img' for child in a_element.find_elements(By.XPATH, './/img')) or
+                                a_element.value_of_css_property("background-image") != ""
                         ):
                     videos_urls.append(a_element.get_attribute('href'))
-                    print(a_element.get_attribute('href'))
         except Exception as e:
             pass
         return videos_urls
@@ -162,11 +162,9 @@ class Scraper:
 
         if self.contains_number(coords.text):
             numeric_result = self.keep_only_numerics_from_string(coords.text)
-            # print(coords.text + ': ' + numeric_result)
             return numeric_result
         else:
             sibling = coords.find_elements(By.XPATH, "following-sibling::*[1]")
-            # print(coords.text + ' ' + sibling[0].text)
             try:
                 return float(sibling[0].text)
             except ValueError:
@@ -179,11 +177,9 @@ class Scraper:
         for delim in location_delimiters:
             if location.text.__contains__(delim) and len(search_text) + 2 < len(location.text):
                 cleansed_location = location.text.split(delim)[1].rstrip().lstrip()
-                # print(location.text + ': ' + cleansed_location)
                 return cleansed_location
         else:
             sibling = location.find_elements(By.XPATH, "following-sibling::*[1]")
-            # print(location.text + ' ' + sibling[0].text)
             try:
                 return sibling[0].text
             except ValueError:
@@ -210,7 +206,7 @@ class Scraper:
                     removed.append(word)
                     search_phrase = search_phrase.replace(word, '')
         search_phrase = re.sub(' +', ' ', search_phrase).__add__(' ').__add__(country).strip()
-        print('Search phrase: ' + search_phrase)
+        # print('Search phrase: ' + search_phrase)
         response = requests.get(geocoding_api_url.format(query=search_phrase, key=geocoding_api_key))
         final_geolocation: GeolocationModel = GeolocationModel()
         if response.status_code == 200:
@@ -231,9 +227,6 @@ class Scraper:
                     found_locations.setdefault(geolocation.entity_type.lower(), []).append(geolocation)
                 except KeyError as e:
                     pass
-                for entity_type in found_locations:
-                    for location in found_locations[entity_type]:
-                        print(location.place + ", " + location.city + ", " + location.country + " (" + location.entity_type + ")")
             max_occurrence = 0
             max_entity_type = ""
             for entity_type in found_locations.keys():
@@ -243,12 +236,11 @@ class Scraper:
                     max_entity_type = entity_type
             if country != "":
                 for location in found_locations[max_entity_type]:
-                    if location.country.__contains__(country):
+                    if location.country == country:
                         final_geolocation = location
                         break
             if final_geolocation.country == "" or final_geolocation.country is None:
                 final_geolocation = found_locations[max_entity_type][0]
-            print()
         else:
             print(response.status_code)
         return final_geolocation
@@ -260,12 +252,9 @@ class Scraper:
         if latitude != .0 or longitude != .0:
             geo.latitude = latitude
             geo.longitude = longitude
-            # locality = self.extract_present_location_from_page("locality")
             city = self.extract_present_location_from_page("city")
             region = self.extract_present_location_from_page("region")
             country = self.extract_present_location_from_page("country")
-            # if locality != '':
-            #     geo.place = locality
             if city != '':
                 geo.city = city
             if region != '':
@@ -276,7 +265,7 @@ class Scraper:
                 else:
                     geo.country += ', ' + country
         else:
-            country = self.find_video_page_country(element, None, 3)
+            country = self.find_video_page_country(element, 5)
             geo = self.find_geolocation_from_page_title(page_title, country, purge_from_src)
         return geo
 
@@ -304,23 +293,27 @@ class Scraper:
                 pass
         return video_src
 
-    def find_video_page_country(self, video_element: WebElement, current_element: WebElement | None, depth: int) -> str:
-        parent_to_search = video_element.find_element(By.XPATH, '..') if current_element is None else current_element.find_element(By.XPATH, '..')
-        while depth > 1:
-            parent_to_search = parent_to_search.find_element(By.XPATH, '..')
-            depth = depth - 1
-        max_occurrence = 0
-        found_country = ""
-        for country in countries:
-            country_elements = parent_to_search.find_elements(By.XPATH, "//*[contains(., '"+country+"')]")
-            occ = country_elements.__len__()
-            if occ > max_occurrence:
-                max_occurrence = occ
-                found_country = country
-        return found_country
+    def find_video_page_country(self, video_element: WebElement, depth: int) -> str:
+        try:
+            parent_to_search = video_element.find_element(By.XPATH, '..')
+            while depth > 1 and parent_to_search.tag_name != 'body' and parent_to_search.tag_name != 'html':
+                parent_to_search = parent_to_search.find_element(By.XPATH, '..')
+                depth = depth - 1
+                # print(parent_to_search.tag_name)
+            max_occurrence = 0
+            found_country = ""
+            for country in countries:
+                country_elements = parent_to_search.find_elements(By.XPATH, "./div/*[contains(., '" + country + "')]")
+                occ = country_elements.__len__()
+                if occ > max_occurrence:
+                    max_occurrence = occ
+                    found_country = country
+            return found_country
+        except Exception as e:
+            pass
 
-    def find_and_click_button_and_divs_to_play_video_element(self, video_element: WebElement, current_element: WebElement | None, depth: int):
-        parent_to_search = video_element.find_element(By.XPATH, '..') if current_element is None else current_element.find_element(By.XPATH, '..')
+    def find_and_click_button_and_divs_to_play_video_element(self, video_element: WebElement, depth: int):
+        parent_to_search = video_element.find_element(By.XPATH, '..')
         while depth > 1:
             parent_to_search = parent_to_search.find_element(By.XPATH, '..')
             depth = depth - 1
@@ -331,15 +324,16 @@ class Scraper:
             video_src = self.move_to_elements_and_get_src(divs, video_element)
         return video_src
 
-    def find_videos_source_in_frame(self, elements: list[WebElement], src: str, url: str) -> List[Data]:
+    def find_videos_source_in_frame(self, elements: list[WebElement], src: str, url: str, vid_clik: bool = True) -> List[Data]:
         videos_urls: list[Data] = []
         try:
             for element in elements:
                 if element.size['width'] >= 10 and element.size['height'] >= 10:
                     video_src = element.get_attribute('src')
-                    if video_src == '' or video_src is None:
-                        video_src = self.find_and_click_button_and_divs_to_play_video_element(element, None, 3)
-                        time.sleep(sleep_time)
+                    if vid_clik:
+                        if video_src == '' or video_src is None:
+                            video_src = self.find_and_click_button_and_divs_to_play_video_element(element, 3)
+                            time.sleep(sleep_time)
                     got_src_from_child = False
                     final_src = ''
                     if video_src is None or video_src == '' or video_src.startswith("blob:"):
@@ -354,9 +348,12 @@ class Scraper:
                     if final_src != '' and final_src is not None:
                         location = self.find_geolocation(self.browser.title, element, self.src != url)
                         videos_urls.append(self.create_data(src, url, final_src, location))
-                        print(url + "   " + final_src)
+                        # print(url + "   " + final_src + "\n")
+                    if videos_urls.__len__() == 0 and vid_clik is True:
+                        for video in self.find_videos_source_in_frame([element], src, url, False):
+                            videos_urls.append(video)
         except Exception as e:
-            print(e)
+            pass
         return videos_urls
 
     def find_video_source_on_page(self, src: str, url_list: List[str]) -> List[Data]:
@@ -426,6 +423,7 @@ def find_videos_in_url_list(src_list: List[str]) -> Dict[str, Scraper]:
                 found_video_sources = scraper.find_video_source_on_page(src, found_urls)
             scraper.found_data = found_video_sources
             videos_urls[scraper.src] = scraper
+            print(src + " " + " done")
             scraper.browser.quit()
     except Exception:
         pass
