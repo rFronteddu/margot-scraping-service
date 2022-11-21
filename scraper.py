@@ -74,7 +74,7 @@ class Scraper:
         self.browser = webdriver.Remote(command_executor="http://selenium:4444/wd/hub",
                                         desired_capabilities=desired_capabilities,
                                         options=chrome_options)
-        #self.browser = webdriver.Chrome(service=Service(ChromeDriverManager(version='106.0.5249.21').install()),  # for debugging purposes
+        # self.browser = webdriver.Chrome(service=Service(ChromeDriverManager(version='106.0.5249.21').install()),  # for debugging purposes
         #                                desired_capabilities=desired_capabilities,
         #                                options=chrome_options)
         self.browser.set_page_load_timeout(30)

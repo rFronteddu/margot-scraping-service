@@ -19,13 +19,11 @@ There is a *docker-compose.yml* file for running the project very easily by call
 ## API endpoints
 The endpoints are accessible by default on the 8081 port (could be adjusted in docker-compose file).   
    
-Currently, there are three endpoints available: 
+Currently, there are two endpoints available: 
 * This endpoint accepts a parameter - a list of string that should represent URL addresses from which the video streams should be extracted. By calling this endpoint, a confirmation about start of scraping is returned as a response, the found data will be available on the */videos* endpoint.
     > POST: /scrape
 * As mentioned above, the next endpoint returns all currently streamed videos with all collected information.
     > GET: /videos
-* The last endpoint accepts a direct video link that should be streamed from the server. When the stream is ready, its rtsp link will be returned.
-    > POST: /stream
 
 **NOTE: Not all videos can be processed by this application. There are a few formats that OpenCV cannot work with and thus, an error message will be returned.**
 
